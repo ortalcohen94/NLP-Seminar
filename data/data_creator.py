@@ -2,7 +2,7 @@ from os import listdir
 from os.path import isfile, join
 import os
 
-def data_create():
+def data_create_Rotten_Tomatoes():
     data = []
     labels = []
     cwd = os.getcwd()
