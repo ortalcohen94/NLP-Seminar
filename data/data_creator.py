@@ -1,9 +1,8 @@
 from os import listdir
 from os.path import isfile, join
 import os
-import pandas as pd
 
-def data_create_Rotten_Tomatoes():
+def data_create():
     data = []
     labels = []
     cwd = os.getcwd()
