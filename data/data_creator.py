@@ -1,6 +1,7 @@
 from os import listdir
 from os.path import isfile, join
 import os
+import pandas as pd
 
 def data_create_Rotten_Tomatoes():
     data = []
@@ -26,6 +27,6 @@ def data_create_SNLI():
         premises = df['sentence1'].to_numpy(dtype = str)
         hypothesises = df['sentence2'].to_numpy(dtype = str)
         golden_labels = df['gold_label'].to_numpy(dtype = str)
-        data[file] = [first + ', ' + second for first, second in zip(premises, hypothesises)]
+        data[file] = {'premise' : premises, 'hypothesis' : hypothesises}
         labels[file] = golden_labels
     return data, labels
