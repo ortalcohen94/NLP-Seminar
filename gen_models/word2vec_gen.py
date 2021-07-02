@@ -20,6 +20,23 @@ class Word2VecEncoder():
     def remove_similar_word(self, word, index):
         del self.most_similar[word][index]
 
+class Word2VecBertEncoder:
+    def __init__(self, dl_train):
+        #TODO: Fine-tuning with dl_train and model's init.
+        self.most_similar = dict()
+        pass
+    
+    def similarity(self, word, radius):
+        #TODO: should return <radius> most similar words in res.
+        res = []
+        res = self.model.wv.most_similar_cosmul(word, topn = radius)
+        self.most_similar[word] = res
+        
+
+    def remove_similar_word(self, word, index):
+        print(word)
+        del self.most_similar[word][index]
+
 class SentencesIter():
     def __init__(self, sentences) -> None:
         self.sentences = sentences
@@ -31,17 +48,25 @@ class SentencesIter():
 class Word2VecGen(GenModel):
 
     #Radius should be between 0 and 1
-    def __init__(self, encoder: Word2VecEncoder, corpus, radius, tokenizer) -> None:
+    def __init__(self, encoder: Word2VecEncoder, corpus, radius, tokenizer, tokens_not_to_sample = None) -> None:
         super().__init__()
         self.encoder = encoder
         self.corpus = corpus
         self.r = radius
         self.tokenizer = tokenizer
+        self.tokens_not_to_sample = tokens_not_to_sample
 
     def sample_instance (self, original_sentence):
         original_sentence = self.tokenizer(original_sentence)
-        idx = np.random.choice(range(len(original_sentence)), 1)[0]
-        #print(idx)
+        if self.tokens_not_to_sample != None:
+            indices = [i for i, token in enumerate(original_sentence) if token not in self.tokens_not_to_sample]
+            print(indices)
+        else:
+            indices = range(len(original_sentence))
+        idx = np.random.choice(indices, 1)[0]
+        while(self.tokens_not_to_sample != None and original_sentence[idx] in self.tokens_not_to_sample):
+            idx = np.random.choice(range(len(original_sentence)), 1)[0]
+        #print(idx):
         #idx = torch.multinomial(torch.FloatTensor(range(len(original_sentence))), 1).item()
         s_j = original_sentence[idx]
         I = [word for word, similarity in self.encoder.similarity(s_j, self.r)]

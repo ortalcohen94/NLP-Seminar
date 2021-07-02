@@ -29,7 +29,7 @@ class StatisticsLocalModel(LocalModel):
             if len(values) == 0:
                 mean[key] = 0
             else:
-                center_values = values - self.y_p_explain
+                center_values = np.asarray(values) - self.y_p_explain
                 curr_mean = np.mean(center_values) 
                 mean[key] = curr_mean
         #print(mean)
