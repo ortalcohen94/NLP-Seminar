@@ -20,12 +20,12 @@ def data_create_SNLI():
     data = dict()
     labels = dict()
     cwd = os.getcwd()
-    data_dir = join(cwd, "data/SNLI")
-    files = ['snli_1.0_train.txt', 'snli_1.0_dev.txt', 'snli_1.0_test.txt']
+    data_dir = join(cwd, "data/eSNLI")
+    files = ['esnli_train.csv', 'esnli_dev.csv', 'esnli_test.csv']
     for file in files:
-        df = pd.read_csv(join(data_dir, file), sep = '	')
-        premises = df['sentence1'].to_numpy(dtype = str)
-        hypothesises = df['sentence2'].to_numpy(dtype = str)
+        df = pd.read_csv(join(data_dir, file))
+        premises = df['Sentence1'].to_numpy(dtype = str)
+        hypothesises = df['Sentence2'].to_numpy(dtype = str)
         golden_labels = df['gold_label'].to_numpy(dtype = str)
         data[file] = {'premise' : premises, 'hypothesis' : hypothesises}
         labels[file] = golden_labels

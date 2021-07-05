@@ -1,6 +1,7 @@
 import numpy as np
 from gen_models.abstract_model import GenModel
 from gensim.models import Word2Vec
+import string
 
 #Implemented gensim by using the following article:
 #https://rare-technologies.com/word2vec-tutorial/
@@ -13,12 +14,20 @@ class Word2VecEncoder():
     def similarity(self, word, radius):
         if (word in self.most_similar):
             return self.most_similar[word]
-        res = self.model.wv.most_similar_cosmul(word, topn = radius)
+        try:
+            res = self.model.wv.most_similar_cosmul(word, topn = radius)
+        except:
+            return None
         self.most_similar[word] = res
         return res
 
     def remove_similar_word(self, word, index):
+        if (word not in self.most_similar):
+            return
         del self.most_similar[word][index]
+
+    def clear_cache(self):
+        self.most_similar = {}
 
 class Word2VecBertEncoder:
     def __init__(self, dl_train):
@@ -60,7 +69,6 @@ class Word2VecGen(GenModel):
         original_sentence = self.tokenizer(original_sentence)
         if self.tokens_not_to_sample != None:
             indices = [i for i, token in enumerate(original_sentence) if token not in self.tokens_not_to_sample]
-            print(indices)
         else:
             indices = range(len(original_sentence))
         idx = np.random.choice(indices, 1)[0]
@@ -69,10 +77,19 @@ class Word2VecGen(GenModel):
         #print(idx):
         #idx = torch.multinomial(torch.FloatTensor(range(len(original_sentence))), 1).item()
         s_j = original_sentence[idx]
-        I = [word for word, similarity in self.encoder.similarity(s_j, self.r)]
-        I_idx = np.random.choice(range(len(I)), 1)[0]#torch.multinomial(torch.FloatTensor(range(len(I))), 1).item()
-        self.encoder.remove_similar_word(s_j, I_idx)
-        s_k = I[I_idx]
+        s_j = s_j.translate(str.maketrans('', '', string.punctuation))
+        #print(s_j)
+        similar_words = self.encoder.similarity(s_j, self.r)
+        if(similar_words == None):
+            return None, None
+        I = [word for word, similarity in similar_words]
+        if (len(I) == 0):
+            return None, None
+        else:
+            I_idx = np.random.choice(range(len(I)), 1)[0]#torch.multinomial(torch.FloatTensor(range(len(I))), 1).item()
+            self.encoder.remove_similar_word(s_j, I_idx)
+            s_k = I[I_idx]
+        s_k = s_k.translate(str.maketrans('', '', string.punctuation))
         new_sentence = original_sentence.copy()
         new_sentence[idx] = s_k
         return idx, new_sentence

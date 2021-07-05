@@ -33,6 +33,8 @@ class MeLimeModel ():
         true_label = self.black_box_model.predict(self.transform_func(x))[0]
         for i in range(self.batch_size):
                 pos, x_i = self.gen_model.sample_instance(x)
+                if (pos == None):
+                    continue
                 listToStr = ' '.join([str(elem) for elem in x_i])
                 transformed_x_i = self.transform_func(listToStr)
                 label = self.black_box_model.predict(transformed_x_i)[0]
@@ -48,7 +50,7 @@ class MeLimeModel ():
 
 
 
-    def forward(self, x):
+    def forward(self, x, should_print = True):
         D = []
         positions = []
         probas = []
@@ -59,10 +61,11 @@ class MeLimeModel ():
         while ((epsilon >= self.epsilon_c or delta >= self.sigma) and count <= self.max_iters):
             for i in range(self.batch_size):
                 pos, x_i = self.gen_model.sample_instance(x)
+                if (pos == None):
+                    continue
                 listToStr = ' '.join([str(elem) for elem in x_i])
                 transformed_x_i = self.transform_func(listToStr)
                 label = self.black_box_model.predict(transformed_x_i)[0]
-                #print(label)
                 positions.append(pos)
                 curr_prob = self.black_box_model.predict_proba(transformed_x_i)[0][true_label]
                 probas.append(curr_prob)
@@ -73,7 +76,7 @@ class MeLimeModel ():
             g_2 = copy.deepcopy(self.explainer_model)
             g_2.copy_training_set()
             delta =  self.get_delta(x, g_2)
-            if (count % self.print_every == 0):
+            if (count % self.print_every == 0 and should_print):
                 print("Iteration number: ", count)
                 print("Delta: ", delta)
         return self.explainer_model.explain(x), sentences_with_probs
