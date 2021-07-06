@@ -3,10 +3,12 @@ import torch
 import torch.nn as nn
 from tqdm import tqdm
 import copy
+import os
 
 class NeuralNetModel (nn.Module):
     def __init__(self, hidden_size, embeddings, embeddings_size, num_layers, text, tag, num_classes = 3, verbose = True):
         super().__init__()
+        self.path_to_save = './black_box_models/saved_models/neural_net'
         self.text = text
         self.tag = tag
         self.N = len(tag.vocab.itos)   # tag vocab size
@@ -96,6 +98,12 @@ class NeuralNetModel (nn.Module):
     '''
     
     def train_all(self, train_iter, val_iter, epochs=100, learning_rate=0.001):
+        if os.path.isfile(self.path_to_save):
+          print("Loading the saved neural network model")
+          self.load_state_dict(torch.load(self.path_to_save))
+          validation_accuracy = self.evaluate(val_iter)
+          print (f'Validation accuracy: {validation_accuracy:.4f}')
+          return
         # Switch the module to training mode
         self.train()
         # Use Adam to optimize the parameters
@@ -136,6 +144,8 @@ class NeuralNetModel (nn.Module):
             if (self.verbose):
                 print (f'Epoch: {epoch} Loss: {epoch_loss:.4f} '
                       f'Validation accuracy: {validation_accuracy:.4f}')
+
+        torch.save(self.best_model, self.path_to_save)
 
             
     def predict(self, text_batch):

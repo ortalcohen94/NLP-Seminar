@@ -7,7 +7,7 @@ import seaborn as sns
 class StatisticsLocalModelNLI(LocalModel):
 
     def __init__(self, y_p_explain, sentence_len, tokenizer, seperator_token_id):
-        self.values_premise = {key : list() for key in range(seperator_token_id)}
+        self.values_premise = {key : list() for key in range(seperator_token_id + 1)}
         self.values_hypothesis = {key : list() for key in range( seperator_token_id + 1, sentence_len+1)}
         self.y_p_explain = y_p_explain
         self.tokenizer = tokenizer
@@ -17,7 +17,7 @@ class StatisticsLocalModelNLI(LocalModel):
         for data, label in batch:
             if (self.seperator_token_id < data):
                 self.values_hypothesis[data].append(label)
-            else:
+            elif self.seperator_token_id > data:
                 self.values_premise[data].append(label)
         
         #Always returns 0 error

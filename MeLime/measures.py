@@ -5,7 +5,7 @@ from gen_models.word2vec_gen import Word2VecGen
 from MeLime.model import MeLimeModel
 
 def calc_f1_esnli(convert_tensor_to_text, clf, transform_func, LABEL, y_p_explain, tokenizer, encoder, x_train, RADIUS, BATCH_SIZE, EPSILON, SIGMA, MAX_ITERS, 
-    num_instance_to_sample = None):
+    num_instance_to_sample = None, print_every = 10):
     # Getting gold explanations:
     df = pd.read_csv(join("data/eSNLI", 'esnli_test.csv'))
     def get_sentence_explanation(df, num):
@@ -63,6 +63,8 @@ def calc_f1_esnli(convert_tensor_to_text, clf, transform_func, LABEL, y_p_explai
             encoder.clear_cache()
             if (num_instance_to_sample != None and num_samples == num_instance_to_sample):
                 break
+            if (num_samples % print_every == 0):
+                print("Done with sample number ", num_samples)
             num_samples += 1
     F1 = 0 if (tp + 0.5 *(tp + fn)) == 0 else tp / (tp + 0.5 *(tp + fn))
     return F1
