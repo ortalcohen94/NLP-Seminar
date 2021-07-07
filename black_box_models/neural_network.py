@@ -1,198 +1,189 @@
-#TODO: Should be in separat file!
 import torch
 import torch.nn as nn
-from tqdm import tqdm
-import copy
+from torch.optim import optimizer
 import os
+from transformers import BertModel, BertConfig
+import time 
+import numpy as np
 
-class NeuralNetModel (nn.Module):
-    def __init__(self, hidden_size, embeddings, embeddings_size, num_layers, text, tag, num_classes = 3, verbose = True):
-        super().__init__()
-        self.path_to_save = './black_box_models/saved_models/neural_net'
-        self.text = text
-        self.tag = tag
-        self.N = len(tag.vocab.itos)   # tag vocab size
-        self.V = len(text.vocab.itos)  # text vocab size
-        self.verbose = verbose
+# Create the BertClassfier class
+class BertClassifier(nn.Module):
+    """Bert Model for Classification Tasks.
+    """
+    def __init__(self, device, freeze_bert=False):
+        """
+        @param    bert: a BertModel object
+        @param    classifier: a torch.nn.Module classifier
+        @param    freeze_bert (bool): Set `False` to fine-tune the BERT model
+        """
+        super(BertClassifier, self).__init__()
+        D_in, H, D_out = 768, 50, 3
+        config = BertConfig.from_pretrained("bert-base-uncased", output_hidden_states=True)
+        self.bert = BertModel.from_pretrained('bert-base-uncased', config = config)
 
-        pad_id = self.text.vocab.stoi[self.tag.pad_token]
-        self.loss_function = nn.CrossEntropyLoss()
-
-        self.premise_layer = nn.Sequential(
-            nn.Embedding.from_pretrained(embeddings = embeddings, freeze = True),
-            nn.LSTM(input_size = embeddings_size, hidden_size = hidden_size, num_layers=num_layers, batch_first=True)
+        self.classifier = nn.Sequential(
+            nn.Linear(D_in, H),
+            nn.ReLU(),
+            #nn.Dropout(0.5),
+            nn.Linear(H, D_out)
         )
-        self.hypothesis_layer = nn.Sequential(
-            nn.Embedding.from_pretrained(embeddings = embeddings, freeze = True),
-            nn.LSTM(input_size = embeddings_size, hidden_size = hidden_size, num_layers=num_layers, batch_first=True)
-        )
-        self.model_layers = nn.Sequential(
-            nn.Linear(hidden_size*2, 200),
-            nn.Tanh(),
-            nn.Linear(200, 200),
-            nn.Tanh(),
-            nn.Linear(200, 200),
-            nn.Tanh(),
-            nn.Linear(200, num_classes),
-            nn.Softmax(dim = -1)
-        )
-        self.log_soft_max = nn.LogSoftmax(dim = -1)
 
-#     def init_parameters(self, init_low=-0.5, init_high=0.5):
-#         """Initialize parameters. We usually use larger initial values for smaller models.
-#         See http://proceedings.mlr.press/v9/glorot10a/glorot10a.pdf for a more
-#         in-depth discussion.
-#         """
-#         for p in self.parameters():
-#             p.data.uniform_(init_low, init_high)
+        if freeze_bert:
+            for param in self.bert.parameters():
+                param.requires_grad = False
         
-    def forward(self, premise_batch, hypothesis_batch):
-        """Performs forward computation over a whole text_batch, returns logits.
+        self.device = device
+        
+    def forward(self, input_ids, attention_mask):
+        """
+        Feed input to BERT and the classifier to compute logits.
+        @param    input_ids (torch.Tensor): an input tensor with shape (batch_size,
+                      max_length)
+        @param    attention_mask (torch.Tensor): a tensor that hold attention mask
+                      information with shape (batch_size, max_length)
+        @return   logits (torch.Tensor): an output tensor with shape (batch_size,
+                      num_labels)
+        """
+        outputs = self.bert(input_ids=input_ids,
+                            attention_mask=attention_mask)
+        
+        last_hidden_state_cls = outputs[0][:, 0, :]
+
+        logits = self.classifier(last_hidden_state_cls)
+
+        return logits
+    
+    def predict(self, instance):
+        """Returns the most likely sequence of tags for a sequence of words in `text_batch`.
 
         Arguments: 
-          text_batch: a tensor of size max_length x batch_size
-          hidden_0: a tensor of size 1 x batch_size x hidden_size
+          text_batch: a tensor containing word ids of size (seq_len, batch_size) 
         Returns:
-          logits: a tensor of size max_length x batch_size x N. It provides a logit for each tag of each word of each sentence
-          in the batch.
+          tag_batch: a tensor containing tag ids of size (seq_len, batch_size)
         """
-        premise_batch = premise_batch.T
-        hypothesis_batch = hypothesis_batch.T
-        _, (premise_layer_output, _) = self.premise_layer(premise_batch)
-        _, (hypothesis_layer_output, _) = self.hypothesis_layer(hypothesis_batch)
-        premise_layer_output = premise_layer_output[-1, :, :].squeeze(0)
-        hypothesis_layer_output = hypothesis_layer_output[-1, :, :].squeeze(0)
-        if (len(premise_layer_output.shape) == 1):
-            premise_layer_output = premise_layer_output.unsqueeze(0)
-        if (len(hypothesis_layer_output.shape) == 1):
-            hypothesis_layer_output = hypothesis_layer_output.unsqueeze(0)
-        concat_output = torch.cat((premise_layer_output, hypothesis_layer_output), dim = 1)
-        res = self.model_layers(concat_output)
-        logits = self.model_layers(concat_output)
-        #print(logits)
-        return logits
-
-    '''
-       Computes the loss for a batch by comparing logits of a batch returned by forward to ground_truth, 
-       which stores the true tag ids for the batch. Thus logits is a tensor of size max_length x batch_size x N, 
-       and ground_truth is a tensor of size max_length x batch_size. Note that the criterion functions in torch expect 
-       outputs of a certain shape, so you might need to perform some shape conversions.
-
-       You might find nn.CrossEntropyLoss from the last project segment useful. 
-       Note that if you use nn.CrossEntropyLoss then you should not use a softmax layer at the end since that's 
-       already absorbed into the loss function. Alternatively, you can use nn.LogSoftmax as the final sublayer 
-       in the forward pass, but then you need to use nn.NLLLoss, which does not contain its own softmax.
-       We recommend the former, since working in log space is usually more numerically stable. 
-       For reshaping tensors, check out the torch.Tensor.view method.
-    '''
-    def compute_loss(self, logits, ground_truth):
-        return self.loss_function(logits, ground_truth.view(-1))
-
-    '''
-      Trains the model on training data generated by the iterator train_iter and validation data val_iter.
-      The epochs and learning_rate variables are the number of epochs (number of times to run through the training data) 
-      to run for and the learning rate for the optimizer, respectively. You can use the validation data to determine 
-      which model was the best one as the epochs go by. Notice that our code below assumes that during training 
-      the best model is stored so that rnn_tagger.load_state_dict(rnn_tagger.best_model) restores the 
-      parameters of the best model.
-    '''
+        with torch.no_grad():
+            logits = self.forward(instance.input_ids, instance.attention_mask)
+            #print(logits)
+            tag_batch = torch.argmax(logits, axis = -1)
+            return tag_batch
     
-    def train_all(self, train_iter, val_iter, epochs=100, learning_rate=0.001):
+    def predict_proba(self, instance):
+        """Returns the most likely sequence of tags for a sequence of words in `text_batch`.
+
+        Arguments: 
+          text_batch: a tensor containing word ids of size (seq_len, batch_size) 
+        Returns:
+          tag_batch: a tensor containing tag ids of size (seq_len, batch_size)
+        """
+        with torch.no_grad():
+            logits = nn.functional.softmax(self.forward(instance.input_ids, instance.attention_mask), dim = 1)
+            return logits
+
+class BertNLITrainer:
+    
+    def __init__(self,model, optimizer, scheduler, device):
+        self.model = model
+        self.loss_fn = nn.CrossEntropyLoss()
+        self.device = device
+        self.optimizer = optimizer
+        self.scheduler = scheduler
+        self.path_to_save = './black_box_models/saved_models/neural_net_bert'
+        
+    def train(self, train_dataloader, val_dataloader=None, epochs=4, evaluation=False):
+        model = self.model
         if os.path.isfile(self.path_to_save):
           print("Loading the saved neural network model")
-          self.load_state_dict(torch.load(self.path_to_save))
-          validation_accuracy = self.evaluate(val_iter)
-          print (f'Validation accuracy: {validation_accuracy:.4f}')
+          self.model.load_state_dict(torch.load(self.path_to_save))
+          if evaluation == True:
+            _, validation_accuracy = self.evaluate(val_dataloader)
+            print (f'Validation accuracy: {validation_accuracy:.4f}')
           return
-        # Switch the module to training mode
-        self.train()
-        # Use Adam to optimize the parameters
-        optim = torch.optim.Adam(self.parameters(), lr=learning_rate)
-        best_validation_accuracy = -float('inf')
-        best_model = None
-        # Run the optimization for multiple epochs
-        for epoch in range(epochs): 
-            total = 0
-            running_loss = 0.0
-            for batch in tqdm(train_iter, leave=self.verbose):
-                # Zero the parameter gradients
-                self.zero_grad()
+        print("Start training...\n")
+        for epoch_i in range(epochs):
 
-                # Input and target
-                premises = batch.sentence1
-                hypothesis = batch.sentence2 
-                tags = batch.gold_label
-                # Run forward pass and compute loss along the way.
-                
-                logits = self.forward(premises, hypothesis)
-                loss = self.compute_loss(logits, tags)
-                (loss/premises.size(1)).backward()
+            print(f"{'Epoch':^7} | {'Batch':^7} | {'Train Loss':^12} | {'Val Loss':^10} | {'Val Acc':^9} | {'Elapsed':^9}")
+            print("-"*70)
 
-                # Update parameters
-                optim.step()
+            t0_epoch, t0_batch = time.time(), time.time()
 
-                # Training stats
-                total += 1
-                running_loss += loss.item()
-                
-            # Evaluate and track improvements on the validation dataset
-            validation_accuracy = self.evaluate(val_iter)
-            if validation_accuracy > best_validation_accuracy:
-                best_validation_accuracy = validation_accuracy
-                self.best_model = copy.deepcopy(self.state_dict())
-            epoch_loss = running_loss / total
-            if (self.verbose):
-                print (f'Epoch: {epoch} Loss: {epoch_loss:.4f} '
-                      f'Validation accuracy: {validation_accuracy:.4f}')
+            total_loss, batch_loss, batch_counts = 0, 0, 0
 
-        torch.save(self.best_model, self.path_to_save)
+            model.train()
 
-            
-    def predict(self, text_batch):
-        """Returns the most likely sequence of tags for a sequence of words in `text_batch`.
+            for step, batch in enumerate(train_dataloader):
+                batch_counts +=1
+                b_input_ids, b_attn_mask, b_labels = tuple(t.to(self.device) for t in batch)
 
-        Arguments: 
-          text_batch: a tensor containing word ids of size (seq_len, batch_size) 
-        Returns:
-          tag_batch: a tensor containing tag ids of size (seq_len, batch_size)
+                model.zero_grad()
+
+                logits = model(b_input_ids, b_attn_mask)
+                loss = self.loss_fn(logits, b_labels)
+                batch_loss += loss.item()
+                total_loss += loss.item()
+
+                loss.backward()
+
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+
+                self.optimizer.step()
+                self.scheduler.step()
+
+                if (step % 20 == 0 and step != 0) or (step == len(train_dataloader) - 1):
+                    time_elapsed = time.time() - t0_batch
+
+                    print(f"{epoch_i + 1:^7} | {step:^7} | {batch_loss / batch_counts:^12.6f} | {'-':^10} | {'-':^9} | {time_elapsed:^9.2f}")
+
+                    batch_loss, batch_counts = 0, 0
+                    t0_batch = time.time()
+
+            avg_train_loss = total_loss / len(train_dataloader)
+
+            print("-"*70)
+
+            if evaluation == True:
+
+                val_loss, val_accuracy = self.evaluate(val_dataloader)
+
+                time_elapsed = time.time() - t0_epoch
+
+                print(f"{epoch_i + 1:^7} | {'-':^7} | {avg_train_loss:^12.6f} | {val_loss:^10.6f} | {val_accuracy:^9.2f} | {time_elapsed:^9.2f}")
+                print("-"*70)
+            print("\n")
+
+        torch.save(self.model.state_dict(), self.path_to_save)
+
+        print("Training complete!")
+
+
+    def evaluate(self, val_dataloader):
+        
+        """After the completion of each training epoch, measure the model's performance
+        on our validation set.
         """
-        logits = self.forward(text_batch.sentence1, text_batch.sentence2)
-        #print(logits)
-        tag_batch = torch.argmax(logits, axis = -1)
-        return tag_batch
+        
+        model = self.model
+
+        model.eval()
+
+        val_accuracy = []
+        val_loss = []
+
+        for batch in val_dataloader:
+            b_input_ids, b_attn_mask, b_labels = tuple(t.to(self.device) for t in batch)
+
+            with torch.no_grad():
+                logits = model(b_input_ids, b_attn_mask)
+
+            loss = self.loss_fn(logits, b_labels)
+            val_loss.append(loss.item())
+
+            preds = torch.argmax(logits, dim=1).flatten()
+
+            accuracy = (preds == b_labels).cpu().numpy().mean() * 100
+            val_accuracy.append(accuracy)
+
+        val_loss = np.mean(val_loss)
+        val_accuracy = np.mean(val_accuracy)
+
+        return val_loss, val_accuracy
     
-    def predict_proba(self, text_batch):
-        """Returns the most likely sequence of tags for a sequence of words in `text_batch`.
-
-        Arguments: 
-          text_batch: a tensor containing word ids of size (seq_len, batch_size) 
-        Returns:
-          tag_batch: a tensor containing tag ids of size (seq_len, batch_size)
-        """
-        if (text_batch is list):
-            print(":)")
-        logits = self.forward(text_batch.sentence1, text_batch.sentence2).detach().cpu().numpy()
-        return logits
-
-
-    def evaluate(self, iterator):
-        """Returns the model's performance on a given dataset `iterator`.
-
-        Arguments: 
-          iterator
-        Returns:
-          overall accuracy
-        """
-        correct = 0
-        total = 0
-        pad_id = self.text.vocab.stoi[self.tag.pad_token]
-        for batch in tqdm(iterator, leave = self.verbose):
-            premises = batch.sentence1
-            hypothesis = batch.sentence2 
-            tags = batch.gold_label
-            tags_pred = self.predict(batch)
-            mask = tags.ne(pad_id)
-            cor = (tags == tags_pred)[mask]
-            correct += cor.float().sum().item()
-            total += mask.float().sum().item()
-        return correct/total

@@ -1,3 +1,9 @@
+import pandas as pd
+from os.path import isfile, join
+#from interpretable_local_models.statistics_model_nli import StatisticsLocalModelNLI
+from gen_models.word2vec_gen import Word2VecGen
+from MeLime.model import MeLimeModel
+
 from interpretable_local_models.abstract_model import LocalModel
 import numpy as np
 import copy
@@ -16,9 +22,9 @@ class StatisticsLocalModelNLI(LocalModel):
     def train(self, batch):
         for data, label in batch:
             if (self.seperator_token_id < data):
-                self.values_hypothesis[data].append(label)
+                self.values_hypothesis[data].append(label.item())
             elif self.seperator_token_id > data:
-                self.values_premise[data].append(label)
+                self.values_premise[data].append(label.item())
         
         #Always returns 0 error
         return 0.0
