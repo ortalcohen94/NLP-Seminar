@@ -51,9 +51,6 @@ class Word2VecELMOEncoder:
         cos_sim_func = nn.CosineSimilarity(dim = 0)
         if (word in self.most_similar):
             return self.most_similar[word]
-#         if word not in self.model.vocab:
-#             print(":(")
-#             return None
         res = self.model.most_similar_cosmul(word, topn = self.extended_radius)
         res = [w for w, _ in res]
         #print(res)
@@ -67,9 +64,6 @@ class Word2VecELMOEncoder:
             cos_sim = cos_sim_func(s[0].embedding, t)
             similarity_met[curr_word] = cos_sim.item()
         res = list(dict(sorted(similarity_met.items(), key=lambda x: x[1], reverse=True)[:radius]).items())
-#         sentences = [self.embedding.embed(Sentence(curr_word, use_tokenizer = False)) for curr_word in res]
-#         sentences = [s.embedding for s in sentences]
-        print(res)
         self.most_similar[word] = res
         return res
 
@@ -80,6 +74,8 @@ class Word2VecELMOEncoder:
 
     def clear_cache(self):
         self.most_similar = {}
+        
+        
 
 class Word2VecGloVeEncoder:
     def __init__(self):

@@ -21,7 +21,7 @@ def get_sentence_explanation(df, num):
     return x_explain
 
 def calc_f1_esnli(predict_label, clf, transform_func, y_p_explain, tokenizer, encoder, x_train, RADIUS, BATCH_SIZE, EPSILON, SIGMA, MAX_ITERS, 
-    num_instance_to_sample = None,should_send_sentence = False, print_every = 10, threshold = 0.6):
+    num_instance_to_sample = None,should_send_sentence = False, print_every = 1, threshold = 0.6):
     # Getting gold explanations:
     df = pd.read_csv(join("data/eSNLI", 'esnli_test.csv'))
     premise_explanations = get_sentence_explanation(df, 1)
@@ -51,8 +51,14 @@ def calc_f1_esnli(predict_label, clf, transform_func, y_p_explain, tokenizer, en
             curr_hypothesis_explanation = set()
             curr_premise_explanation = set()
             did_pass_premise = False
-            curr_premise_explanation = set([i for i, (word, prob) in enumerate(res) if (prob >= threshold and i < id_seperator)])
-            curr_hypothesis_explanation = set([i for i, (word, prob) in enumerate(res) if (prob >= threshold and i > id_seperator)])
+            # print(x_explain)
+            # print(res)
+            curr_premise_explanation = set([i for i, (word, prob) in enumerate(res) if (abs(prob) >= threshold and i < id_seperator)])
+            curr_hypothesis_explanation = set([i-id_seperator-1 for i, (word, prob) in enumerate(res) if (abs(prob) >= threshold and i > id_seperator)])
+            # print(premise_explanations[i])
+            # print(hypothesis_explanations[i])
+            # print(curr_premise_explanation)
+            # print(curr_hypothesis_explanation)
             tp += len(curr_premise_explanation.intersection(premise_explanations[i]))
             tp += len(curr_hypothesis_explanation.intersection(hypothesis_explanations[i]))
             fp += len(curr_hypothesis_explanation.difference(hypothesis_explanations[i]))
@@ -64,6 +70,8 @@ def calc_f1_esnli(predict_label, clf, transform_func, y_p_explain, tokenizer, en
             if (num_instance_to_sample != None and num_samples == num_instance_to_sample):
                 break
             if (num_samples % print_every == 0):
+                F1 = 0 if (tp + 0.5 *(tp + fn)) == 0 else tp / (tp + 0.5 *(tp + fn))
                 print("Done with sample number ", num_samples)
+                print("F1 score: ", F1)
     F1 = 0 if (tp + 0.5 *(tp + fn)) == 0 else tp / (tp + 0.5 *(tp + fn))
     return F1
