@@ -4,29 +4,28 @@ from interpretable_local_models.statistics_model_nli import StatisticsLocalModel
 from gen_models.word2vec_gen import Word2VecGen
 from MeLime.model import MeLimeModel
 
+def get_sentence_explanation(df, num):
+    x_explain = []
+    for i in range(len(df['Sentence' + str(num) + '_Highlighted_1'])):
+        res = None
+        for t in ['1', '2', '3']:
+            x = df['Sentence' + str(num) + '_Highlighted_'+t][i]
+            if x == '{}':
+                res = set()
+            else:
+                if res == None:
+                    res = set(map(int, x.split(',')))
+                    continue
+                res = res.intersection(set(map(int, x.split(','))))
+        x_explain.append(res)
+    return x_explain
+
 def calc_f1_esnli(predict_label, clf, transform_func, y_p_explain, tokenizer, encoder, x_train, RADIUS, BATCH_SIZE, EPSILON, SIGMA, MAX_ITERS, 
-    num_instance_to_sample = None,should_send_sentence = False, print_every = 10):
+    num_instance_to_sample = None,should_send_sentence = False, print_every = 10, threshold = 0.6):
     # Getting gold explanations:
     df = pd.read_csv(join("data/eSNLI", 'esnli_test.csv'))
-    def get_sentence_explanation(df, num):
-        x_explain = []
-        for i in range(len(df['Sentence' + str(num) + '_Highlighted_1'])):
-            res = None
-            for t in ['1', '2', '3']:
-                x = df['Sentence' + str(num) + '_Highlighted_'+t][i]
-                if x == '{}':
-                    res = set()
-                else:
-                    if res == None:
-                        res = set(map(int, x.lower().split(',')))
-                        continue
-                    res = res.intersection(set(map(int, x.lower().split(','))))
-            x_explain.append(res)
-        return x_explain
-
     premise_explanations = get_sentence_explanation(df, 1)
     hypothesis_explanations = get_sentence_explanation(df, 2)
-    threshold = 0.3
     num_samples = 0
     tp = 0
     fp = 0
@@ -40,12 +39,11 @@ def calc_f1_esnli(predict_label, clf, transform_func, y_p_explain, tokenizer, en
         label = df['gold_label'][i]
         if(predict_label(x_explain, clf) == label):
     #         print("Computing")
-    #         print(x_explain)
             id_seperator = len(tokenizer(premise))
             #print(id_seperator)
             explainer_model = StatisticsLocalModelNLI(y_p_explain, len(tokenizer(x_explain)), tokenizer, id_seperator)
             generator = Word2VecGen(encoder = encoder, corpus = x_train, radius = RADIUS, tokenizer = tokenizer,
-                        tokens_not_to_sample = ['*', '.', 'a'], should_send_sentence = should_send_sentence)
+                        tokens_not_to_sample = ['*', '.'], should_send_sentence = should_send_sentence)
             model = MeLimeModel(black_box_model = clf,gen_model =generator, batch_size = BATCH_SIZE, epsilon_c = EPSILON, 
                         sigma = SIGMA, explainer_model = explainer_model, transform_func = transform_func, 
                         max_iters = MAX_ITERS, tokenizer = tokenizer)
